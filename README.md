@@ -68,6 +68,12 @@ It is recommended to set scan time to 1 second.
 
 The 3rd-party F-Droid repository [IzzyOnDroid](https://android.izzysoft.de/repo) is known to include Cat-Printer.
 
+### iOS (Sideload, no jailbreak)
+
+An iOS port is included in `/ios`, using SwiftUI + CoreBluetooth while reusing the same Web UI and API behavior.
+
+See the full tutorial here: **[`ios/README.iOS.md`](./ios/README.iOS.md)**.
+
 ### Windows
 
 1. Download [source code](https://github.com/NaitLee/Cat-Printer/archive/refs/heads/main.zip) of this repository and install newest version of [Python](https://www.python.org/).
