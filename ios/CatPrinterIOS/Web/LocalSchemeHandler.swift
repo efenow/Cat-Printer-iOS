@@ -16,10 +16,9 @@ final class LocalSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
 
-        let path = normalizePath(requestURL.path)
-
         Task {
             do {
+                let path = try normalizePath(requestURL.path)
                 let method = urlSchemeTask.request.httpMethod?.uppercased() ?? "GET"
                 if method == "POST", let response = try await api.handle(path: path, body: urlSchemeTask.request.httpBody ?? Data()) {
                     respond(task: urlSchemeTask, data: response, mimeType: "application/json", status: 200)
@@ -42,6 +41,10 @@ final class LocalSchemeHandler: NSObject, WKURLSchemeHandler {
             } catch let apiError as APIError {
                 let body = apiError.json
                 respond(task: urlSchemeTask, data: body, mimeType: "application/json", status: 500)
+            } catch LocalError.notFound {
+                fail(task: urlSchemeTask, status: 404, error: "Not found")
+            } catch LocalError.forbiddenPath {
+                fail(task: urlSchemeTask, status: 403, error: "Forbidden path")
             } catch {
                 fail(task: urlSchemeTask, status: 500, error: error.localizedDescription)
             }
@@ -50,9 +53,11 @@ final class LocalSchemeHandler: NSObject, WKURLSchemeHandler {
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {}
 
-    private func normalizePath(_ path: String) -> String {
+    private func normalizePath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        guard !trimmed.contains("..") else { return "" }
+        guard !trimmed.contains("..") else {
+            throw LocalError.forbiddenPath
+        }
         return trimmed
     }
 
@@ -121,5 +126,6 @@ final class LocalSchemeHandler: NSObject, WKURLSchemeHandler {
 
     private enum LocalError: Error {
         case notFound
+        case forbiddenPath
     }
 }

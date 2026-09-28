@@ -49,6 +49,7 @@ final class BLEPrinterService: NSObject {
 
     private var scanContinuation: CheckedContinuation<[ScannedDevice], Error>?
     private var connectContinuation: CheckedContinuation<Void, Error>?
+    private var pendingServiceDiscoveryCount = 0
 
     private var flowPaused = false
 
@@ -101,18 +102,18 @@ final class BLEPrinterService: NSObject {
         selectedModel = Self.resolveModel(name)
         txCharacteristic = nil
         rxCharacteristic = nil
+        pendingServiceDiscoveryCount = 0
 
-        if connected?.identifier != peripheral.identifier {
-            connected = peripheral
-            connected?.delegate = self
-            central.connect(peripheral, options: nil)
-        } else {
-            peripheral.delegate = self
-            peripheral.discoverServices(nil)
-        }
-
-        try await withCheckedThrowingContinuation { cont in
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             connectContinuation = cont
+            if connected?.identifier != peripheral.identifier {
+                connected = peripheral
+                connected?.delegate = self
+                central.connect(peripheral, options: nil)
+            } else {
+                peripheral.delegate = self
+                peripheral.discoverServices(nil)
+            }
         }
     }
 
@@ -231,7 +232,14 @@ extension BLEPrinterService: CBPeripheralDelegate {
             connectContinuation = nil
             return
         }
-        peripheral.services?.forEach { peripheral.discoverCharacteristics(nil, for: $0) }
+        let services = peripheral.services ?? []
+        pendingServiceDiscoveryCount = services.count
+        if pendingServiceDiscoveryCount == 0 {
+            connectContinuation?.resume(throwing: PrinterServiceError.characteristicMissing)
+            connectContinuation = nil
+            return
+        }
+        services.forEach { peripheral.discoverCharacteristics(nil, for: $0) }
     }
 
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
@@ -251,8 +259,14 @@ extension BLEPrinterService: CBPeripheralDelegate {
             }
         }
 
+        pendingServiceDiscoveryCount = max(0, pendingServiceDiscoveryCount - 1)
         if txCharacteristic != nil {
             connectContinuation?.resume(returning: ())
+            connectContinuation = nil
+            return
+        }
+        if pendingServiceDiscoveryCount == 0 {
+            connectContinuation?.resume(throwing: PrinterServiceError.characteristicMissing)
             connectContinuation = nil
         }
     }
